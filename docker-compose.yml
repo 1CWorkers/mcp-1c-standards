@@ -26,7 +26,7 @@ services:
   mcp-http:
     build: .
     image: mcp-1c-standards:latest
-    container_name: mcp-1c-standards
+    container_name: mcp-1c-standard-review
     ports:
       - "${MCP_PORT:-3000}:3000"
     environment:
@@ -41,7 +41,7 @@ services:
   mcp-http-full:
     build: .
     image: mcp-1c-standards:latest
-    container_name: mcp-1c-standards-full
+    container_name: mcp-1c-standard-review-full
     ports:
       - "${MCP_PORT:-3000}:3000"
     env_file:
@@ -59,7 +59,7 @@ services:
   mcp-http-custom:
     build: .
     image: mcp-1c-standards:latest
-    container_name: mcp-1c-standards-custom
+    container_name: mcp-1c-standard-review-custom
     ports:
       - "${MCP_PORT:-3000}:3000"
     environment:
@@ -76,7 +76,7 @@ services:
   mcp-full:
     build: .
     image: mcp-1c-standards:latest
-    container_name: mcp-1c-standards-all
+    container_name: mcp-1c-standard-review-all
     profiles:
       - full
     ports:
@@ -122,12 +122,10 @@ services:
       - .env
     environment:
       DATA_DIR: /app/data
-      SCRAPE_ON_START: "true"
       FORCE_RESCRAPE: "true"
     volumes:
       - standards-data:/app/data
-    command: >
-      sh -c "node build/scraper.js && echo '✅ Готово'"
+    entrypoint: ["node", "build/scraper.js"]
 
 volumes:
   standards-data:

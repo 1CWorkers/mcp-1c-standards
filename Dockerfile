@@ -9,7 +9,7 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 
 COPY package.json package-lock.json* ./
-RUN npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 COPY tsconfig.json ./
 COPY src/ ./src/
@@ -26,7 +26,7 @@ WORKDIR /app
 
 # Только production-зависимости
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --ignore-scripts && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # Скомпилированный код
 COPY --from=builder /build/build/ ./build/

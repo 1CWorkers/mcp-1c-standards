@@ -9,3 +9,4 @@ build
 .vscode
 .idea
 custom-standards
+setup.ps1

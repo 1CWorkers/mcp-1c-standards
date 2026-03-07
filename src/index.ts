@@ -231,11 +231,11 @@ const server = new McpServer({
 
 server.tool(
   "search_standards",
-  "Поиск по стандартам разработки 1С:Предприятие 8. Используйте для поиска правил именования, форматирования кода, работы с запросами, транзакциями, формами и другими аспектами разработки на платформе 1С.",
+  "Search 1C:Enterprise 8 development standards. Use to find naming conventions, code formatting rules, query best practices, transaction handling, form design and other 1C platform development guidelines.",
   {
-    query: z.string().describe("Поисковый запрос на русском языке, например: 'именование переменных', 'запросы в цикле', 'блокировки данных'"),
-    category: z.string().optional().describe("ID категории для фильтрации (опционально). Используйте list_categories для получения списка."),
-    limit: z.number().min(1).max(20).default(5).describe("Максимальное количество результатов (по умолчанию 5)"),
+    query: z.string().describe("Search query in Russian, e.g.: 'именование переменных', 'запросы в цикле', 'блокировки данных'"),
+    category: z.string().optional().describe("Category ID to filter results (optional). Use list_categories to get available IDs."),
+    limit: z.number().min(1).max(20).default(5).describe("Maximum number of results (default: 5)"),
   },
   async ({ query, category, limit }) => {
     const results = searchStandards(query, { category, limit });
@@ -271,9 +271,9 @@ server.tool(
 
 server.tool(
   "get_standard",
-  "Получить полный текст конкретного стандарта разработки 1С по его ID. Используйте после поиска, чтобы прочитать стандарт целиком.",
+  "Get the full text of a specific 1C development standard by its ID. Use after search_standards to read the complete standard.",
   {
-    standard_id: z.string().describe("ID стандарта, например: 'std-456'"),
+    standard_id: z.string().describe("Standard ID, e.g.: 'std-456'"),
   },
   async ({ standard_id }) => {
     const standard = data.standards.find((s) => s.id === standard_id);
@@ -304,7 +304,7 @@ server.tool(
 
 server.tool(
   "list_categories",
-  "Получить список всех категорий стандартов разработки 1С с количеством стандартов в каждой.",
+  "Get a list of all 1C development standard categories with the number of standards in each.",
   {},
   async () => {
     const categoryCounts = new Map<string, number>();
@@ -334,10 +334,10 @@ server.tool(
 
 server.tool(
   "check_code",
-  "Проверить фрагмент кода на 1С на соответствие стандартам разработки. Анализирует код и указывает, какие стандарты могут быть нарушены.",
+  "Check a 1C code snippet against development standards. Analyzes the code and reports which standards may be violated.",
   {
-    code: z.string().describe("Фрагмент кода на языке 1С для проверки"),
-    context: z.string().optional().describe("Контекст: где используется код (модуль объекта, модуль формы, общий модуль и т.п.)"),
+    code: z.string().describe("1C language code snippet to check"),
+    context: z.string().optional().describe("Context: where the code is used (object module, form module, common module, etc.)"),
   },
   async ({ code, context }) => {
     const issues: { rule: string; standardId: string; description: string }[] = [];
@@ -468,7 +468,7 @@ server.tool(
 
 server.tool(
   "get_standards_for_topic",
-  "Получить все релевантные стандарты для конкретной темы разработки на 1С. Полезно при начале работы над новой функциональностью.",
+  "Get all relevant 1C development standards for a specific topic. Useful when starting work on new functionality.",
   {
     topic: z.enum([
       "проведение_документов",
@@ -481,7 +481,7 @@ server.tool(
       "обмен_данными",
       "производительность",
       "структура_кода",
-    ]).describe("Тема разработки"),
+    ]).describe("Development topic: document_posting, forms, queries, error_handling, naming, locks_and_transactions, rights_and_roles, data_exchange, performance, code_structure"),
   },
   async ({ topic }) => {
     const topicMapping: Record<string, string[]> = {
@@ -534,8 +534,8 @@ server.tool(
 
 server.prompt(
   "code_review_1c",
-  "Провести ревью кода 1С на соответствие стандартам разработки",
-  { code: z.string().describe("Код на 1С для ревью") },
+  "Perform a code review of 1C code against development standards",
+  { code: z.string().describe("1C code to review") },
   ({ code }) => ({
     messages: [
       {
@@ -570,8 +570,8 @@ ${code}
 
 server.prompt(
   "explain_standard",
-  "Объяснить стандарт разработки 1С простыми словами с примерами",
-  { topic: z.string().describe("Тема или название стандарта") },
+  "Explain a 1C development standard in simple terms with code examples",
+  { topic: z.string().describe("Standard topic or name") },
   ({ topic }) => ({
     messages: [
       {

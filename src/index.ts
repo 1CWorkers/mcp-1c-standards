@@ -220,8 +220,9 @@ function searchStandards(
     .map((s) => s.standard);
 }
 
-// ─── MCP Server ──────────────────────────────────────────────────────────────
+// ─── MCP Server Factory ──────────────────────────────────────────────────────
 
+function createServer(): McpServer {
 const server = new McpServer({
   name: "1c-standards",
   version: "1.0.0",
@@ -590,6 +591,9 @@ server.prompt(
   })
 );
 
+return server;
+}
+
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
 function getCategoryName(categoryId: string): string {
@@ -626,13 +630,14 @@ async function main() {
 
       // MCP endpoint
       if (url.pathname === "/mcp") {
-        // Для каждого нового запроса без session — создаём транспорт
         const sessionId = url.searchParams.get("sessionId") || req.headers["mcp-session-id"] as string;
 
         if (req.method === "POST") {
           let existingTransport = sessionId ? transports.get(sessionId) : undefined;
 
           if (!existingTransport) {
+            // Новая сессия — новый сервер + новый транспорт
+            const sessionServer = createServer();
             const newTransport = new StreamableHTTPServerTransport({
               sessionIdGenerator: () => crypto.randomUUID(),
               onsessioninitialized: (sid) => {
@@ -649,7 +654,7 @@ async function main() {
               }
             };
 
-            await server.connect(newTransport);
+            await sessionServer.connect(newTransport);
             existingTransport = newTransport;
           }
 
@@ -688,7 +693,8 @@ async function main() {
       console.error(`   Health check: http://0.0.0.0:${port}/health`);
     });
   } else {
-    // Режим stdio — для локального запуска и Claude Code
+    // Режим stdio — один сервер, один транспорт
+    const server = createServer();
     const stdioTransport = new StdioServerTransport();
     await server.connect(stdioTransport);
     console.error("🚀 MCP-сервер стандартов 1С запущен (stdio)");

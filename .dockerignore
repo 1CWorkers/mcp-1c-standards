@@ -1,0 +1,11 @@
+node_modules
+build
+.git
+.github
+.gitignore
+.env
+*.md
+!README.md
+.vscode
+.idea
+custom-standards

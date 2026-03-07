@@ -1,0 +1,13 @@
+node_modules/
+build/
+.env
+*.log
+
+# Скачанные стандарты (могут содержать защищённый контент ИТС)
+# Встроенная base в data/ коммитится
+# Полная скачанная база — нет
+data/standards-full.json
+
+# Пользовательские стандарты (у каждого свои)
+custom-standards/*.json
+!custom-standards/example.json

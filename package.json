@@ -1,0 +1,25 @@
+{
+  "name": "mcp-1c-standards",
+  "version": "1.0.0",
+  "description": "MCP-сервер стандартов разработки 1С:Предприятие 8",
+  "type": "module",
+  "bin": {
+    "mcp-1c-standards": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "scrape": "npx tsx src/scraper.ts",
+    "dev": "npx tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0",
+    "cheerio": "^1.0.0"
+  }
+}

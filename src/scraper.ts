@@ -82,6 +82,56 @@ function extractArticleLinks(html: string): { title: string; path: string }[] {
   return links;
 }
 
+function extractBrowseLinks(html: string): string[] {
+  const links = new Set<string>();
+  const regex = /<a[^>]+href="(\/db\/v8std\/browse\/[^"#?]+(?:\?[^"#]*)?)"[^>]*>/gi;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    links.add(match[1].split("#")[0]);
+  }
+
+  return Array.from(links);
+}
+
+async function collectSectionArticleLinks(sectionPath: string): Promise<{ title: string; path: string }[]> {
+  const queue: string[] = [sectionPath];
+  const queued = new Set<string>([sectionPath]);
+  const visited = new Set<string>();
+  const articleMap = new Map<string, { title: string; path: string }>();
+
+  while (queue.length > 0) {
+    const browsePath = queue.shift()!;
+    queued.delete(browsePath);
+
+    if (visited.has(browsePath)) continue;
+    visited.add(browsePath);
+
+    try {
+      const html = await fetchPage(`${BASE_URL}${browsePath}`);
+
+      for (const article of extractArticleLinks(html)) {
+        if (!articleMap.has(article.path)) {
+          articleMap.set(article.path, article);
+        }
+      }
+
+      for (const subPath of extractBrowseLinks(html)) {
+        if (!visited.has(subPath) && !queued.has(subPath)) {
+          queue.push(subPath);
+          queued.add(subPath);
+        }
+      }
+
+      await new Promise((r) => setTimeout(r, 250));
+    } catch (err) {
+      console.error(`   [browse-error] ${browsePath}: ${(err as Error).message}`);
+    }
+  }
+
+  return Array.from(articleMap.values());
+}
+
 /**
  * Извлекает содержимое статьи стандарта
  */
@@ -264,8 +314,7 @@ async function scrapeAllStandards(): Promise<void> {
     categories.push({ id: section.id, name: section.name, order: i + 1 });
 
     try {
-      const sectionHtml = await fetchPage(`${BASE_URL}${section.path}`);
-      const articles = extractArticleLinks(sectionHtml);
+      const articles = await collectSectionArticleLinks(section.path);
       console.log(`   Найдено статей: ${articles.length}`);
 
       for (let j = 0; j < articles.length; j++) {

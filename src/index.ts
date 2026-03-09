@@ -419,12 +419,59 @@ function searchStandards(
     .map((s) => s.standard);
 }
 
+// ─── ID Normalization & Fallback Lookup ──────────────────────────────────────
+
+/**
+ * Нормализует ID стандарта: "436", "std436", "std-436", "std_436" → "std-436"
+ */
+function normalizeStandardId(input: string): string {
+  const cleaned = input.trim().toLowerCase();
+  // Извлекаем число из любого формата
+  const numMatch = cleaned.match(/(\d+)/);
+  if (!numMatch) return cleaned;
+  return `std-${numMatch[1]}`;
+}
+
+/**
+ * Ищет стандарт по ID с нормализацией, потом fallback по URL и заголовку
+ */
+function findStandard(input: string): Standard | undefined {
+  const normalized = normalizeStandardId(input);
+
+  // 1. Точное совпадение по нормализованному ID
+  let found = data.standards.find(
+    (s) => normalizeStandardId(s.id) === normalized
+  );
+  if (found) return found;
+
+  // 2. Fallback: число из input совпадает с числом в URL (/content/436/hdoc)
+  const numMatch = input.match(/(\d+)/);
+  if (numMatch) {
+    const num = numMatch[1];
+    found = data.standards.find(
+      (s) => s.url.includes(`/content/${num}/`)
+    );
+    if (found) return found;
+  }
+
+  // 3. Fallback: подстрока в заголовке (если ввели не число, а текст)
+  if (!numMatch) {
+    const inputLower = input.toLowerCase();
+    found = data.standards.find(
+      (s) => s.title.toLowerCase().includes(inputLower)
+    );
+    if (found) return found;
+  }
+
+  return undefined;
+}
+
 // ─── MCP Server Factory ──────────────────────────────────────────────────────
 
 function createServer(): McpServer {
 const server = new McpServer({
   name: "1c-standards",
-  version: "1.0.0",
+  version: "1.0.4",
 });
 
 // ─── Tool: search_standards ──────────────────────────────────────────────────
@@ -471,19 +518,19 @@ server.tool(
 
 server.tool(
   "get_standard",
-  "Get the full text of a specific 1C development standard by its ID. Use after search_standards to read the complete standard.",
+  "Get the full text of a specific 1C development standard by its ID. Accepts flexible formats: '436', 'std436', 'std-436'. Also searches by title substring if ID not found.",
   {
-    standard_id: z.string().describe("Standard ID, e.g.: 'std-456'"),
+    standard_id: z.string().describe("Standard ID in any format: '456', 'std-456', 'std456', or a title substring"),
   },
   async ({ standard_id }) => {
-    const standard = data.standards.find((s) => s.id === standard_id);
+    const standard = findStandard(standard_id);
 
     if (!standard) {
       return {
         content: [
           {
             type: "text" as const,
-            text: `Стандарт с ID "${standard_id}" не найден. Используйте search_standards для поиска.`,
+            text: `Стандарт "${standard_id}" не найден. Попробуйте:\n- Числовой ID: 456\n- Полный ID: std-456\n- Фрагмент заголовка: "Структура модуля"\n- Или используйте search_standards для поиска.`,
           },
         ],
       };

@@ -114,7 +114,18 @@ function extractBrowseLinks(html: string): string[] {
   return Array.from(links);
 }
 
-async function collectSectionArticleLinks(sectionPath: string): Promise<{ title: string; path: string }[]> {
+function isPathInsideSection(browsePath: string, sectionId: string): boolean {
+  const cleanPath = browsePath.split("?")[0];
+  const match = cleanPath.match(/^\/db\/v8std\/browse\/13\/(.+)$/);
+  if (!match) return false;
+  const segments = match[1].split("/").filter(Boolean);
+  return segments.includes(sectionId);
+}
+
+async function collectSectionArticleLinks(
+  sectionPath: string,
+  sectionId: string
+): Promise<{ title: string; path: string }[]> {
   const queue: string[] = [sectionPath];
   const queued = new Set<string>([sectionPath]);
   const visited = new Set<string>();
@@ -137,6 +148,9 @@ async function collectSectionArticleLinks(sectionPath: string): Promise<{ title:
       }
 
       for (const subPath of extractBrowseLinks(html)) {
+        if (!isPathInsideSection(subPath, sectionId)) {
+          continue;
+        }
         if (!visited.has(subPath) && !queued.has(subPath)) {
           queue.push(subPath);
           queued.add(subPath);
@@ -335,7 +349,7 @@ async function scrapeAllStandards(): Promise<void> {
     categories.push({ id: section.id, name: section.name, order: i + 1 });
 
     try {
-      const articles = await collectSectionArticleLinks(section.path);
+      const articles = await collectSectionArticleLinks(section.path, section.id);
       console.log(`   Найдено статей: ${articles.length}`);
 
       for (let j = 0; j < articles.length; j++) {
@@ -370,14 +384,17 @@ async function scrapeAllStandards(): Promise<void> {
     }
   }
 
-  // Сохраняем результат
+  // Удаляем возможные дубли и сохраняем результат
+  const uniqueStandards = Array.from(
+    new Map(allStandards.map((s) => [s.id, s])).values()
+  );
   const outputPath = path.join(DATA_DIR, "standards.json");
-  const data = { categories, standards: allStandards };
+  const data = { categories, standards: uniqueStandards };
 
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), "utf-8");
 
-  console.log(`\n✅ Загружено ${allStandards.length} стандартов`);
+  console.log(`\n✅ Загружено ${uniqueStandards.length} стандартов (raw: ${allStandards.length})`);
   console.log(`🍪 Cookies в сессии: ${cookieJar.size} (${getCookieHeader().length} байт)`);
   console.log(`📁 Сохранено в ${outputPath}`);
 }

@@ -30,7 +30,27 @@ const SECTIONS = [
 ];
 
 const BASE_URL = "https://its.1c.ru";
-let sessionCookie = "";
+
+// Cookie jar — дедупликация по имени, без разрастания
+const cookieJar = new Map<string, string>();
+
+function getCookieHeader(): string {
+  return Array.from(cookieJar.entries())
+    .map(([name, value]) => `${name}=${value}`)
+    .join("; ");
+}
+
+function updateCookies(setCookieHeaders: string[]): void {
+  for (const header of setCookieHeaders) {
+    const pair = header.split(";")[0]; // берём только name=value, без path/expires
+    const eqIndex = pair.indexOf("=");
+    if (eqIndex > 0) {
+      const name = pair.substring(0, eqIndex).trim();
+      const value = pair.substring(eqIndex + 1).trim();
+      cookieJar.set(name, value);
+    }
+  }
+}
 
 interface Standard {
   id: string;
@@ -195,30 +215,34 @@ function generateTags(title: string, content: string): string[] {
   return Array.from(tags);
 }
 
-async function fetchPage(url: string): Promise<string> {
+async function fetchPage(url: string, retries: number = 2): Promise<string> {
   const headers: Record<string, string> = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.5",
   };
 
-  if (sessionCookie) {
-    headers["Cookie"] = sessionCookie;
+  const cookie = getCookieHeader();
+  if (cookie) {
+    headers["Cookie"] = cookie;
   }
 
   const response = await fetch(url, { headers, redirect: "follow" });
 
   if (!response.ok) {
+    if (response.status === 400 && retries > 0) {
+      // Возможно сервер сбросил сессию — пауза и повтор
+      console.error(`   ⚠️  HTTP 400 на ${url.substring(0, 80)}... повтор через 3с (осталось ${retries})`);
+      await new Promise((r) => setTimeout(r, 3000));
+      return fetchPage(url, retries - 1);
+    }
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
-  // Собираем Set-Cookie для последующих запросов
+  // Обновляем cookie jar (дедупликация по имени)
   const setCookies = response.headers.getSetCookie?.() || [];
   if (setCookies.length > 0) {
-    const newCookies = setCookies
-      .map((c) => c.split(";")[0])
-      .join("; ");
-    sessionCookie = sessionCookie ? `${sessionCookie}; ${newCookies}` : newCookies;
+    updateCookies(setCookies);
   }
 
   // its.1c.ru использует Windows-1251
@@ -252,7 +276,7 @@ async function authenticate(login: string, password: string): Promise<boolean> {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Cookie": sessionCookie,
+        "Cookie": getCookieHeader(),
       },
       body: formData.toString(),
       redirect: "follow",
@@ -261,10 +285,7 @@ async function authenticate(login: string, password: string): Promise<boolean> {
     // Собираем cookie из ответа
     const setCookies = authResponse.headers.getSetCookie?.() || [];
     if (setCookies.length > 0) {
-      const newCookies = setCookies
-        .map((c) => c.split(";")[0])
-        .join("; ");
-      sessionCookie = sessionCookie ? `${sessionCookie}; ${newCookies}` : newCookies;
+      updateCookies(setCookies);
     }
 
     // Шаг 3: Проверяем, что авторизация прошла — пробуем загрузить защищённую страницу
@@ -357,6 +378,7 @@ async function scrapeAllStandards(): Promise<void> {
   fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), "utf-8");
 
   console.log(`\n✅ Загружено ${allStandards.length} стандартов`);
+  console.log(`🍪 Cookies в сессии: ${cookieJar.size} (${getCookieHeader().length} байт)`);
   console.log(`📁 Сохранено в ${outputPath}`);
 }
 

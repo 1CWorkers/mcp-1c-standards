@@ -137,6 +137,40 @@ claude mcp remove 1c-standards
 
 ---
 
+## Подключение к Codex
+
+### Вариант 1: HTTP (сервер уже запущен)
+
+```bash
+# Запустить сервер (если еще не запущен)
+docker run -d --name mcp-1c-standard-review -p 3000:3000 -e MCP_TRANSPORT=http -v mcp-1c-data:/app/data mcp-1c-standards
+
+# Подключить в Codex
+codex mcp add 1c-standards --transport streamable_http http://localhost:3000/mcp
+```
+
+### Вариант 2: Stdio (Docker запускается по требованию)
+
+```bash
+codex mcp add 1c-standards \
+  --transport stdio \
+  -- docker run -i --rm -v mcp-1c-data:/app/data mcp-1c-standards
+```
+
+### Проверить
+
+```bash
+codex mcp list
+# Должен быть в списке: 1c-standards
+```
+
+### Удалить (если нужно)
+
+```bash
+codex mcp remove 1c-standards
+```
+
+---
 ## Подключение к Claude Desktop
 
 Откройте файл настроек:

@@ -165,22 +165,176 @@ console.error(`✅ Итого: ${data.standards.length} стандартов, ${
 
 // ─── Search Engine ───────────────────────────────────────────────────────────
 
+// ── Russian Stemmer (Porter-like for Russian) ────────────────────────────────
+
+const VOWELS = new Set("аеёиоуыэюя".split(""));
+
+function russianStem(word: string): string {
+  if (word.length < 4) return word;
+
+  // Шаг 1: убираем окончания прилагательных/причастий
+  let stem = word
+    .replace(/(ими|ыми|ему|ому|его|ого|ами|ями|ией|ьей|ией)$/, "")
+    .replace(/(ая|яя|ое|ее|ие|ые|ой|ей|ий|ый|ую|юю)$/, "")
+    .replace(/(ого|его|ому|ему|ыми|ими)$/, "");
+
+  // Шаг 2: убираем глагольные окончания
+  stem = stem
+    .replace(/(ейте|уйте|ться|ются|ился|ится|ёшь|ешь)$/, "")
+    .replace(/(ать|ять|еть|ить|уть|оть|ыть)$/, "")
+    .replace(/(ала|ала|або|ило|ыло|ело|ано|ято|ито)$/, "")
+    .replace(/(ует|ёт|ет|ит|ат|ят|ут|ют)$/, "")
+    .replace(/(ал|ал|ил|ыл|ел|ан|ят|ит)$/, "");
+
+  // Шаг 3: убираем суффиксы существительных
+  stem = stem
+    .replace(/(ость|ност|ение|ание|ство|ции|ний|тель)$/, "")
+    .replace(/(ика|ика|ция|ция|ний|ние|тие)$/, "")
+    .replace(/(ок|ек|ик|ак|ец|цо|це)$/, "")
+    .replace(/(ей|ий|ой|ям|ам|ом|ов|ев|ях|ах|ых|их)$/, "")
+    .replace(/(ь|й|а|я|о|е|и|ы|у|ю)$/, "");
+
+  return stem.length >= 2 ? stem : word.substring(0, Math.max(word.length - 1, 2));
+}
+
+// ── Synonym Dictionary (EN→RU + RU→RU aliases) ──────────────────────────────
+
+const SYNONYMS: Record<string, string[]> = {
+  // English → Russian terms
+  "query":        ["запрос", "запросы"],
+  "queries":      ["запрос", "запросы"],
+  "loop":         ["цикл", "цикле"],
+  "lock":         ["блокировка", "блокировки"],
+  "locks":        ["блокировка", "блокировки"],
+  "transaction":  ["транзакция", "транзакции"],
+  "transactions": ["транзакция", "транзакции"],
+  "exception":    ["исключение", "исключения", "попытка"],
+  "try":          ["попытка"],
+  "catch":        ["исключение"],
+  "error":        ["ошибка", "ошибки", "исключение"],
+  "errors":       ["ошибка", "ошибки"],
+  "variable":     ["переменная", "переменные"],
+  "variables":    ["переменная", "переменные"],
+  "naming":       ["именование", "имена", "переменных"],
+  "function":     ["функция", "функции", "процедура"],
+  "procedure":    ["процедура", "процедуры"],
+  "form":         ["форма", "формы"],
+  "forms":        ["форма", "формы", "управляемые"],
+  "module":       ["модуль", "модуля"],
+  "rights":       ["права", "роли", "доступ"],
+  "roles":        ["роли", "права"],
+  "role":         ["роль", "роли"],
+  "permissions":  ["права", "доступ"],
+  "performance":  ["производительность", "оптимизация"],
+  "optimization": ["оптимизация", "производительность"],
+  "document":     ["документ", "документы"],
+  "posting":      ["проведение"],
+  "exchange":     ["обмен", "обмена"],
+  "async":        ["асинхронный", "асинхронные", "ждать"],
+  "modal":        ["модальный", "модальные", "предупреждение", "вопрос"],
+  "comment":      ["комментарий", "комментарии", "описание"],
+  "export":       ["экспорт", "экспортные"],
+  "register":     ["регистр", "регистры"],
+  "table":        ["таблица", "таблицы", "табличная"],
+  "index":        ["индекс", "индексы"],
+  "temporary":    ["временные", "временная"],
+  "client":       ["клиент", "клиенте"],
+  "server":       ["сервер", "сервере"],
+  "session":      ["сеанс", "сеанса"],
+  "xml":          ["xml", "сериализация"],
+  "rls":          ["rls", "ограничение", "доступ"],
+  "code":         ["код", "кода"],
+  "review":       ["ревью", "проверка"],
+  "standard":     ["стандарт", "стандарты"],
+  "standards":    ["стандарт", "стандарты"],
+
+  // Russian aliases
+  "попытка-исключение": ["попытка", "исключение"],
+  "код-ревью":          ["ревью", "проверка", "код"],
+  "бсп":                ["библиотека", "стандартных", "подсистем"],
+  "тз":                 ["техническое", "задание"],
+};
+
 /**
- * Простой полнотекстовый поиск по стандартам с поддержкой русского языка
+ * Expands a query word with synonyms and returns all variants
  */
+function expandWithSynonyms(word: string): string[] {
+  const lower = word.toLowerCase();
+  const results = [lower];
+  if (SYNONYMS[lower]) {
+    results.push(...SYNONYMS[lower]);
+  }
+  return results;
+}
+
+// ── Fuzzy Match (Levenshtein distance) ───────────────────────────────────────
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      const cost = b.charAt(i - 1) === a.charAt(j - 1) ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Checks if any word in the text fuzzy-matches the query word
+ * Returns true if Levenshtein distance ≤ threshold
+ */
+function fuzzyContains(text: string, word: string, maxDistance: number = 1): boolean {
+  if (word.length < 4) return false; // too short for fuzzy
+  const textWords = text.split(/[\s,.;:!?()\[\]{}"'«»—\-\/]+/);
+  for (const tw of textWords) {
+    if (tw.length < 3) continue;
+    // Only compare words of similar length
+    if (Math.abs(tw.length - word.length) > maxDistance) continue;
+    if (levenshteinDistance(tw, word) <= maxDistance) return true;
+  }
+  return false;
+}
+
+// ── Main Search Function ─────────────────────────────────────────────────────
+
 function searchStandards(
   query: string,
   options?: { category?: string; limit?: number }
 ): Standard[] {
   const limit = options?.limit ?? 10;
   const queryLower = query.toLowerCase();
-  const queryWords = queryLower
+  const rawWords = queryLower
     .split(/\s+/)
-    .filter((w) => w.length > 2);
+    .filter((w) => w.length > 1);
+
+  // Expand each word: original + stemmed + synonyms
+  const expandedWordSets = rawWords.map((word) => {
+    const synonyms = expandWithSynonyms(word);
+    const stemmed = russianStem(word);
+    const all = new Set([word, stemmed, ...synonyms]);
+    // Also stem synonyms
+    for (const syn of synonyms) {
+      all.add(russianStem(syn));
+    }
+    return all;
+  });
 
   let candidates = data.standards;
 
-  // Фильтр по категории
+  // Category filter
   if (options?.category) {
     candidates = candidates.filter(
       (s) =>
@@ -189,26 +343,71 @@ function searchStandards(
     );
   }
 
-  // Подсчёт релевантности
   const scored = candidates.map((standard) => {
     let score = 0;
     const titleLower = standard.title.toLowerCase();
     const contentLower = standard.content.toLowerCase();
     const tagsStr = standard.tags.join(" ").toLowerCase();
 
-    for (const word of queryWords) {
-      // Точное совпадение в заголовке — макс. вес
-      if (titleLower.includes(word)) score += 10;
-      // В тегах
-      if (tagsStr.includes(word)) score += 5;
-      // В контенте
-      if (contentLower.includes(word)) score += 2;
+    // Pre-stem title and tags words for comparison
+    const titleWords = titleLower.split(/[\s,.;:!?()\[\]{}"'«»—\-\/]+/).filter(Boolean);
+    const titleStems = new Set(titleWords.map(russianStem));
+    const tagWords = tagsStr.split(/[\s,]+/).filter(Boolean);
+    const tagStems = new Set(tagWords.map(russianStem));
+
+    for (const wordSet of expandedWordSets) {
+      let wordMatched = false;
+
+      for (const variant of wordSet) {
+        const variantStem = russianStem(variant);
+
+        // Exact substring match in title (highest weight)
+        if (titleLower.includes(variant)) {
+          score += 12;
+          wordMatched = true;
+        }
+        // Stem match in title
+        else if (titleStems.has(variantStem)) {
+          score += 10;
+          wordMatched = true;
+        }
+
+        // Exact in tags
+        if (tagsStr.includes(variant)) {
+          score += 6;
+          wordMatched = true;
+        }
+        // Stem match in tags
+        else if (tagStems.has(variantStem)) {
+          score += 5;
+          wordMatched = true;
+        }
+
+        // Exact substring in content
+        if (contentLower.includes(variant)) {
+          score += 3;
+          wordMatched = true;
+        }
+      }
+
+      // Fuzzy match fallback (only if no exact/stem match found)
+      if (!wordMatched) {
+        const originalWord = [...wordSet][0]; // first = original word
+        if (originalWord.length >= 4) {
+          if (fuzzyContains(titleLower, originalWord)) {
+            score += 6;
+          } else if (fuzzyContains(tagsStr, originalWord)) {
+            score += 3;
+          } else if (fuzzyContains(contentLower.substring(0, 2000), originalWord)) {
+            score += 1;
+          }
+        }
+      }
     }
 
-    // Полная фраза в заголовке — бонус
-    if (titleLower.includes(queryLower)) score += 20;
-    // Полная фраза в контенте — бонус
-    if (contentLower.includes(queryLower)) score += 8;
+    // Full phrase bonus
+    if (titleLower.includes(queryLower)) score += 25;
+    if (contentLower.includes(queryLower)) score += 10;
 
     return { standard, score };
   });
